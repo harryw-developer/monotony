@@ -1,0 +1,131 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #111111;
+  --color-paper: #fff8ec;
+  --color-money: #00c26e;
+  --color-hot: #ff3d7f;
+  --color-sun: #ffd23f;
+  --color-sky: #3da5ff;
+  --color-grape: #8b5cf6;
+  --color-vault: #14121f;
+  --color-vault-card: #221e35;
+  --color-vault-line: #3a3354;
+
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  --text-huge: 96px;
+  --text-big: 64px;
+}
+
+:root {
+  --edge: #111111;
+  --shade: #111111;
+  color-scheme: light;
+}
+
+[data-theme="vault"] {
+  --edge: #0a0910;
+  --shade: #8b5cf6;
+  color-scheme: dark;
+}
+
+@layer base {
+html,
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+body.vault {
+  background: var(--color-vault);
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+input,
+textarea {
+  font: inherit;
+}
+}
+
+@layer components {
+/* Chunky outline + hard offset shadow, the core of the look. */
+.brut {
+  border: 3px solid var(--edge);
+  border-radius: 16px;
+  box-shadow: 4px 4px 0 var(--shade);
+}
+
+.brut-sm {
+  border: 3px solid var(--edge);
+  border-radius: 12px;
+  box-shadow: 3px 3px 0 var(--shade);
+}
+
+/* Pressed state: shadow drops to 0 and the element shifts down-right. */
+.press {
+  transition: transform 70ms ease-out, box-shadow 70ms ease-out;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.press:active:not(:disabled),
+.press[data-pressed="true"] {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 var(--shade);
+}
+.press:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.safe-top {
+  padding-top: max(16px, env(safe-area-inset-top));
+}
+.safe-bottom {
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.paper-grid {
+  background-image: radial-gradient(rgba(17, 17, 17, 0.08) 1.5px, transparent 1.5px);
+  background-size: 18px 18px;
+}
+
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
