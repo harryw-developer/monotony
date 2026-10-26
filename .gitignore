@@ -3,3 +3,6 @@ dist
 .DS_Store
 *.local
 tsconfig.tsbuildinfo
+dist-cf
+.wrangler
+monotony-cloudflare.zip

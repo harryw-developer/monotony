@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test:sql": "node scripts/test-sql.mjs",
-    "deploy": "npm run build && node scripts/deploy.mjs"
+    "deploy": "npm run build && node scripts/deploy.mjs",
+    "build:cf": "tsc -b && vite build --mode cloudflare --outDir dist-cf"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
