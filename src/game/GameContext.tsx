@@ -1,11 +1,12 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useToast } from '../components/toast'
-import { api } from '../lib/api'
+import { type AdminResult, api } from '../lib/api'
+import { collectDeviceInfo } from '../lib/deviceInfo'
 import { clearSession, type Session } from '../lib/device'
 import { buzz, sfx } from '../lib/sound'
 import { load, save } from '../lib/storage'
 import { supabase } from '../lib/supabase'
-import type { Account, GameEvent, Player, State, Tx } from '../lib/types'
+import type { Account, GameEvent, Player, State, Tone, Tx } from '../lib/types'
 
 export type Celebration = { id: string; amount: number; from: Player | 'bank' | 'parking'; note: string | null }
 
@@ -27,7 +28,8 @@ type GameCtx = {
   request: (toPlayer: string, amount: number, note?: string) => Promise<boolean>
   respond: (requestId: string, accept: boolean) => Promise<boolean>
   claimGo: () => Promise<'paid' | 'pending' | null>
-  admin: (action: string, payload?: Record<string, unknown>, success?: string) => Promise<boolean>
+  admin: (action: string, payload?: Record<string, unknown>, success?: string) => Promise<AdminResult | null>
+  toast: (text: string, tone?: Tone) => void
 }
 
 const Ctx = createContext<GameCtx | null>(null)
@@ -105,6 +107,9 @@ export function GameProvider({
           } else if (e.kind === 'lock') {
             sfx.lock()
             buzz([200, 80, 200])
+          } else if (e.kind === 'reload') {
+            toast('The Banker is refreshing your app…', 'grape')
+            window.setTimeout(() => window.location.reload(), 900)
           }
         }
         if (latest > seenEvent.current) seenEvent.current = latest
@@ -181,6 +186,40 @@ export function GameProvider({
     return () => window.clearInterval(id)
   }, [live, refresh])
 
+  // Tell the Banker about this device: on open, when it comes back to the
+  // foreground or goes away, and once a minute while open.
+  useEffect(() => {
+    let last = ''
+    const report = async () => {
+      try {
+        const info = await collectDeviceInfo()
+        const key = JSON.stringify({ ...info, viewport: null })
+        if (key === last && document.visibilityState === 'visible') return
+        last = key
+        await api.reportDevice(session.gameId, info)
+      } catch {
+        /* best effort */
+      }
+    }
+    void report()
+    const id = window.setInterval(() => {
+      last = ''
+      void report()
+    }, 60000)
+    const onChange = () => void report()
+    document.addEventListener('visibilitychange', onChange)
+    window.addEventListener('online', onChange)
+    window.addEventListener('offline', onChange)
+    screen.orientation?.addEventListener?.('change', onChange)
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener('visibilitychange', onChange)
+      window.removeEventListener('online', onChange)
+      window.removeEventListener('offline', onChange)
+      screen.orientation?.removeEventListener?.('change', onChange)
+    }
+  }, [session.gameId])
+
   const run = useCallback(
     async <T,>(fn: () => Promise<T>, success?: string): Promise<T | null> => {
       try {
@@ -222,9 +261,10 @@ export function GameProvider({
       request: async (toPlayer, amount, note) => (await run(() => api.request(g, toPlayer, amount, note))) !== null,
       respond: async (id, accept) => (await run(() => api.respond(g, id, accept))) !== null,
       claimGo: async () => (await run(() => api.claimGo(g)))?.status ?? null,
-      admin: async (action, payload = {}, success) => (await run(() => api.admin(g, action, payload), success)) !== null,
+      admin: (action, payload = {}, success) => run(() => api.admin(g, action, payload), success),
+      toast,
     }
-  }, [state, session, serverOffset, live, refresh, celebration, broadcast, run])
+  }, [state, session, serverOffset, live, refresh, celebration, broadcast, run, toast])
 
   if (!value) return <>{fallback(error)}</>
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

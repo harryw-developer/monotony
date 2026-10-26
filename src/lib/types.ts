@@ -7,6 +7,7 @@ export type Rules = {
   allow_requests: boolean
   allow_negative: boolean
   auto_go: boolean
+  joining_open?: boolean
 }
 
 export type Game = {
@@ -37,6 +38,12 @@ export type Player = {
   kicked: boolean
   joined_at: string
   online: boolean
+  // Banker only:
+  device?: Record<string, string | number | boolean | null>
+  visits?: number
+  last_seen?: string
+  claim_code?: string | null
+  claim_expires?: string | null
 }
 
 export type Tx = {
@@ -69,8 +76,8 @@ export type Req = {
 export type GameEvent = {
   id: string
   target_player: string | null
-  kind: 'lock' | 'broadcast' | 'notice' | 'ended'
-  payload: { text?: string; tone?: Tone; message?: string; from?: string; until?: string }
+  kind: 'lock' | 'broadcast' | 'notice' | 'ended' | 'reload'
+  payload: { text?: string; tone?: Tone; message?: string; from?: string; until?: string; private?: boolean }
   created_at: string
 }
 
@@ -83,6 +90,16 @@ export type State = {
   transactions: Tx[]
   requests: Req[]
   events: GameEvent[]
+  admin_log: AdminLog[]
+}
+
+export type AdminLog = {
+  id: string
+  actor: string | null
+  action: string
+  target: string | null
+  payload: Record<string, unknown>
+  created_at: string
 }
 
 export type Settings = {

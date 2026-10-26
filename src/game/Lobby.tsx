@@ -1,11 +1,13 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { QRCodeSVG } from 'qrcode.react'
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Avatar, Button, Chip, Logo } from '../components/ui'
+import { Avatar, Button, Chip, Kbd, Logo } from '../components/ui'
 import { clearSession } from '../lib/device'
 import { formatCode, joinUrl, money } from '../lib/format'
+import { isTyping } from '../lib/useMedia'
 import { useGame } from './GameContext'
-import { MuteButton } from './GameScreen'
+import { MuteButton } from './Frame'
 
 export default function Lobby() {
   const { state, players, me, currency, admin, byId } = useGame()
@@ -13,9 +15,20 @@ export default function Lobby() {
   const g = state.game
   const url = joinUrl(g.code)
   const banker = byId.get(g.banker_player ?? '')
+  useEffect(() => {
+    if (!state.is_admin) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.defaultPrevented && !isTyping(e) && !document.querySelector('[role=dialog]')) {
+        e.preventDefault()
+        void admin('start')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [state.is_admin, admin])
 
   return (
-    <div className="safe-bottom mx-auto flex min-h-dvh max-w-[480px] flex-col px-4">
+    <div className="safe-bottom mx-auto flex min-h-dvh max-w-[480px] flex-col px-4 lg:max-w-[1040px] lg:pt-6">
       <div className="safe-top flex items-center justify-between pb-2">
         <div className="-ml-2 -rotate-3">
           <Logo size={0.55} />
@@ -23,6 +36,9 @@ export default function Lobby() {
         <MuteButton />
       </div>
 
+      {/* Laptop: code and QR on the left, players filling in on the right. */}
+      <div className="lg:grid lg:grid-cols-[420px_minmax(0,1fr)] lg:items-start lg:gap-10">
+      <div>
       {state.is_admin ? (
         <>
           <section className="brut bg-white p-4 text-center">
@@ -54,11 +70,13 @@ export default function Lobby() {
           <p className="mt-3 text-[13px] font-semibold opacity-70">Game {formatCode(g.code)}</p>
         </section>
       )}
+      </div>
 
-      <h2 className="font-display mt-6 mb-2 text-xl">
+      <div>
+      <h2 className="font-display mt-6 mb-2 text-xl lg:mt-0">
         Players <span className="opacity-50">({players.length})</span>
       </h2>
-      <ul className="grid grid-cols-3 gap-3 pb-4">
+      <ul className="grid grid-cols-3 gap-3 pb-4 lg:grid-cols-4">
         <AnimatePresence>
           {players.map((p) => (
             <motion.li
@@ -77,11 +95,13 @@ export default function Lobby() {
           ))}
         </AnimatePresence>
       </ul>
+      </div>
+      </div>
 
-      <div className="mt-auto pt-2 pb-2">
+      <div className="mt-auto pt-2 pb-2 lg:mt-6 lg:ml-auto lg:w-[420px]">
         {state.is_admin ? (
           <Button size="xl" variant="money" block onClick={() => admin('start')}>
-            Deal money 💸
+            Deal money 💸 <Kbd>Enter</Kbd>
           </Button>
         ) : (
           <Button

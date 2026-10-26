@@ -3,9 +3,24 @@ import { type ButtonHTMLAttributes, type ReactNode, useEffect, useRef, useState 
 import { emojiFor, hexFor, TONE_HEX } from '../lib/avatars'
 import { money } from '../lib/format'
 import { buzz, sfx } from '../lib/sound'
+import { isTyping, useWide } from '../lib/useMedia'
 import type { Tone } from '../lib/types'
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ')
+
+/** A key hint, e.g. <Kbd>P</Kbd>. Hidden on touch screens. */
+export function Kbd({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <kbd
+      className={cx(
+        'kbd-hint min-w-6 items-center justify-center rounded-md border-2 border-current px-1.5 font-sans text-[12px] leading-5 font-bold opacity-60',
+        className,
+      )}
+    >
+      {children}
+    </kbd>
+  )
+}
 
 const VARIANT: Record<string, string> = {
   money: 'bg-money text-ink',
@@ -200,42 +215,73 @@ export function AnimatedMoney({ value, currency, className }: { value: number | 
 }
 
 export function Sheet({
-  open, onClose, children, dark, title,
-}: { open: boolean; onClose: () => void; children: ReactNode; dark?: boolean; title?: ReactNode }) {
+  open, onClose, children, dark, title, wide, onEscape,
+}: {
+  open: boolean; onClose: () => void; children: ReactNode; dark?: boolean; title?: ReactNode; wide?: boolean
+  /** Return true to handle Esc yourself (e.g. step back) instead of closing. */
+  onEscape?: () => boolean
+}) {
+  const desktop = useWide()
+  const panel = useRef<HTMLDivElement>(null)
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+  const escRef = useRef(onEscape)
+  escRef.current = onEscape
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !e.defaultPrevented) {
+        e.preventDefault()
+        if (!escRef.current?.()) closeRef.current()
+      }
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+    const back = document.activeElement as HTMLElement | null
+    window.setTimeout(() => panel.current?.focus(), 30)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      back?.focus?.()
+    }
+  }, [open])
   return (
     <AnimatePresence>
       {open && (
-        <motion.div className="fixed inset-0 z-40 flex items-end justify-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+        <motion.div
+          className={cx('fixed inset-0 z-40 flex', desktop ? 'items-stretch justify-end' : 'items-end justify-center')}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
           <div className="absolute inset-0 bg-ink/60" onClick={onClose} />
           <motion.div
+            ref={panel}
+            tabIndex={-1}
             role="dialog"
             aria-modal
             data-theme={dark ? 'vault' : undefined}
             className={cx(
-              'safe-bottom relative max-h-[92dvh] w-full max-w-[520px] overflow-y-auto rounded-t-[24px] border-[3px] border-b-0 px-4 pt-3',
+              'scroll-thin relative overflow-y-auto border-[3px] px-4 outline-none',
+              desktop
+                ? cx('h-full rounded-l-[24px] border-r-0 px-6 pt-6 pb-6', wide ? 'w-[min(640px,100%)]' : 'w-[min(520px,100%)]')
+                : 'safe-bottom max-h-[92dvh] w-full max-w-[520px] rounded-t-[24px] border-b-0 pt-3',
               dark ? 'bg-vault text-paper' : 'bg-paper text-ink',
             )}
             style={{ borderColor: dark ? 'var(--color-grape)' : 'var(--edge)' }}
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
+            initial={desktop ? { x: '100%' } : { y: '100%' }}
+            animate={desktop ? { x: 0 } : { y: 0 }}
+            exit={desktop ? { x: '100%' } : { y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 320 }}
           >
-            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-current opacity-30" />
+            {!desktop && <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-current opacity-30" />}
             <div className="mb-3 flex items-center gap-3">
               <div className="font-display min-w-0 flex-1 text-2xl">{title}</div>
               <button
                 onClick={onClose}
-                className="brut-sm press flex h-12 w-12 items-center justify-center bg-white text-xl text-ink"
+                className="brut-sm press flex h-12 shrink-0 items-center justify-center gap-2 bg-white px-3 text-xl text-ink"
                 aria-label="Close"
+                title="Close (Esc)"
               >
-                ✕
+                ✕<Kbd className="text-ink">Esc</Kbd>
               </button>
             </div>
             {children}
@@ -294,8 +340,30 @@ export function HoldButton({
 const CHIPS = [10, 50, 100, 200, 500]
 
 /** 3×4 keypad with quick-add chips. Value is a whole number, max 9,999,999. */
-export function Keypad({ value, onChange, dark, chips = true }: { value: number; onChange: (v: number) => void; dark?: boolean; chips?: boolean }) {
+export function Keypad({
+  value, onChange, dark, chips = true, keyboard = true,
+}: { value: number; onChange: (v: number) => void; dark?: boolean; chips?: boolean; keyboard?: boolean }) {
   const set = (v: number) => onChange(Math.max(0, Math.min(9999999, v)))
+  // Physical keyboard: digits type, Backspace deletes, Delete clears.
+  const latest = useRef({ value, set })
+  latest.current = { value, set }
+  useEffect(() => {
+    if (!keyboard) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || isTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return
+      const { value: v, set: put } = latest.current
+      if (/^[0-9]$/.test(e.key)) {
+        const next = Number(String(v === 0 ? '' : v) + e.key)
+        if (next <= 9999999) put(next)
+      } else if (e.key === 'Backspace') put(Math.floor(v / 10))
+      else if (e.key === 'Delete') put(0)
+      else return
+      e.preventDefault()
+      sfx.tap()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [keyboard])
   const press = (k: string) => {
     sfx.tap()
     buzz(8)
@@ -315,6 +383,7 @@ export function Keypad({ value, onChange, dark, chips = true }: { value: number;
             <button
               key={c}
               type="button"
+              title={`Add ${c}`}
               onClick={() => {
                 sfx.tap()
                 set(value + c)

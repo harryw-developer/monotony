@@ -10,7 +10,7 @@ await db.exec(`
   create schema realtime;
   create function realtime.send(jsonb, text, text, boolean) returns void language sql as 'select null';
 `)
-for (const f of ['001_monotony.sql', '003_pin_search_path.sql']) {
+for (const f of ['001_monotony.sql', '003_pin_search_path.sql', '004_admin_control.sql']) {
   await db.exec(readFileSync(new URL('../supabase/migrations/' + f, import.meta.url), 'utf8'))
 }
 await db.exec(`grant usage on schema public to anon;`)
@@ -44,7 +44,7 @@ async function fails(promise, match, label) {
 }
 
 const secret = () => randomBytes(24).toString('hex')
-const bank = secret(), alex = secret(), sam = secret(), jo = secret()
+let bank = secret(), alex = secret(), sam = secret(), jo = secret()
 
 console.log('setup')
 const g = await rpc('create_game', {
@@ -164,6 +164,62 @@ await act('bankrupt', { player: j.player_id, to: S })
 ok((await bal('Jo')) === 0 && (await bal('Sam')) === 3250, 'bankrupt moves money to another player')
 await act('kick', { player: j.player_id })
 await fails(rpc('get_state', { p_game_id: G, p_secret: jo }), 'removed', 'kicked player is locked out')
+console.log('admin control')
+await rpc('report_device', { p_game_id: G, p_secret: alex, p_info: { os: 'iOS 18', browser: 'Safari 18', battery: 0.42 } })
+st = await rpc('get_state', { p_game_id: G, p_secret: bank })
+ok(st.players.find((p) => p.id === A).device.os === 'iOS 18', 'Banker sees device details')
+ok(st.admin_log.some((l) => l.action === 'transfer' && l.target === S), 'admin actions are logged with their target')
+st = await rpc('get_state', { p_game_id: G, p_secret: sam })
+ok(st.players.every((p) => p.device === undefined) && st.admin_log.length === 0, 'players cannot see device details or the admin log')
+await fails(rpc('report_device', { p_game_id: G, p_secret: alex, p_info: { junk: 'x'.repeat(5000) } }), 'not valid', 'oversized device report rejected')
+await fails(rpc('report_device', { p_game_id: G, p_secret: secret(), p_info: {} }), 'not in this game', 'strangers cannot report devices')
+
+await act('edit_rules', { rules: { joining_open: false }, quiet: true })
+await fails(rpc('join_game', { p_code: g.code, p_secret: secret(), p_name: 'Zed', p_avatar: 'cat', p_colour: 'pink' }), 'closed', 'closed game refuses new players')
+ok((await rpc('join_game', { p_code: g.code, p_secret: alex, p_name: 'x', p_avatar: 'cat', p_colour: 'pink' })).rejoined, 'existing players can still rejoin a closed game')
+await act('edit_rules', { rules: { joining_open: true } })
+st = await rpc('get_state', { p_game_id: G, p_secret: bank })
+ok(st.game.rules.joining_open === true && st.game.rules.free_parking === true && st.game.rules.show_balances === false, 'editing one rule keeps the others')
+
+const sc = await act('seat_code', { player: A })
+ok(/^\d{6}$/.test(sc.code), 'seat code issued: ' + sc.code)
+const newPhone = secret()
+await fails(rpc('claim_seat', { p_code: g.code, p_secret: newPhone, p_claim: sc.code === '000000' ? '111111' : '000000' }), 'wrong or has expired', 'wrong seat code rejected')
+await fails(rpc('claim_seat', { p_code: g.code, p_secret: sam, p_claim: sc.code }), 'already has a seat', 'a phone with a seat cannot claim another')
+const cl = await rpc('claim_seat', { p_code: g.code, p_secret: newPhone, p_claim: sc.code })
+ok(cl.player_id === A, 'new phone takes over the seat')
+await fails(rpc('get_state', { p_game_id: G, p_secret: alex }), 'not in this game', 'old phone loses the seat')
+await fails(rpc('claim_seat', { p_code: g.code, p_secret: secret(), p_claim: sc.code }), 'wrong or has expired', 'seat codes work once')
+alex = newPhone
+ok((await bal('Alexander')) === 1700, 'balance survives the move')
+
+await act('fine', { players: [S], amount: 50 })
+st = await rpc('get_state', { p_game_id: G, p_secret: bank })
+ok(st.game.free_parking === 50, 'fines go into Free Parking')
+await act('set_parking', { amount: 500 })
+ok((await rpc('get_state', { p_game_id: G, p_secret: bank })).game.free_parking === 500, 'set the pot')
+await act('freeze_all', { frozen: true })
+st = await rpc('get_state', { p_game_id: G, p_secret: bank })
+ok(st.players.filter((p) => !p.kicked && !p.is_banker).every((p) => p.frozen) && !st.players.find((p) => p.is_banker).frozen, 'freeze everyone except the Banker')
+await act('freeze_all', { frozen: false })
+await act('message', { player: S, message: 'Psst' })
+ok((await rpc('get_state', { p_game_id: G, p_secret: sam })).events.some((e) => e.kind === 'broadcast' && e.payload.private), 'private message reaches its player')
+ok(!(await rpc('get_state', { p_game_id: G, p_secret: alex })).events.some((e) => e.payload.message === 'Psst'), 'other players do not see it')
+await act('reload', { player: S })
+ok((await rpc('get_state', { p_game_id: G, p_secret: sam })).events.some((e) => e.kind === 'reload'), 'remote reload event')
+const rq3 = await rpc('request_money', { p_game_id: G, p_secret: sam, p_to_player: A, p_amount: 10 })
+ok((await rpc('get_state', { p_game_id: G, p_secret: bank })).requests.some((r) => r.id === rq3), 'Banker sees player requests')
+await act('cancel_request', { request: rq3 })
+ok(!(await rpc('get_state', { p_game_id: G, p_secret: alex })).requests.some((r) => r.id === rq3), 'Banker cancels a request')
+await act('restore', { kicked_player: j.player_id })
+ok(!(await rpc('get_state', { p_game_id: G, p_secret: bank })).players.find((p) => p.id === j.player_id).kicked, 'removed player restored')
+await act('restart', {})
+st = await rpc('get_state', { p_game_id: G, p_secret: bank })
+ok(st.players.filter((p) => !p.kicked).every((p) => p.balance === 1500 && !p.bankrupt) && st.game.free_parking === 0, 'restart resets every balance and the pot')
+const nc = await act('new_code', {})
+await fails(rpc('find_game', { p_code: g.code, p_secret: secret() }), 'No game', 'old code stops working')
+ok((await rpc('find_game', { p_code: nc.code, p_secret: secret() })).game_id === G, 'new code works')
+
 await act('set_deputy', { player: S })
 await fails(rpc('admin_action', { p_game_id: G, p_secret: sam, p_action: 'broadcast', p_payload: { message: 'x' } }), 'Only the Banker', 'deputy has no powers while the Banker is online')
 await db.exec(`update players set last_seen = now() - interval '2 minutes' where id = '${g.player_id}'`)

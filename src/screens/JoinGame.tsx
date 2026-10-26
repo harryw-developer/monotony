@@ -55,7 +55,9 @@ export default function JoinGame() {
   const params = useParams()
   const saved = load('me', { name: '', avatar: '', colour: '' })
   const [code, setCode] = useState(cleanCode(params.code ?? ''))
-  const [step, setStep] = useState<'code' | 'you'>('code')
+  const [step, setStep] = useState<'code' | 'you' | 'seat'>('code')
+  const [closed, setClosed] = useState(false)
+  const [seatCode, setSeatCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [scan, setScan] = useState(false)
@@ -81,10 +83,11 @@ export default function JoinGame() {
           return
         }
         setTaken({ colours: g.taken_colours, avatars: g.taken_avatars })
+        setClosed(g.joining_open === false)
         if (g.taken_avatars.includes(avatar)) setAvatar(firstFree(AVATARS, g.taken_avatars))
         if (g.taken_colours.includes(colour)) setColour(firstFree(COLOURS, g.taken_colours))
         sfx.notice()
-        setStep('you')
+        setStep(g.joining_open === false ? 'seat' : 'you')
       })
       .catch((e: Error) => {
         sfx.error()
@@ -110,16 +113,66 @@ export default function JoinGame() {
     }
   }
 
+  const claim = async () => {
+    unlockAudio()
+    setBusy(true)
+    try {
+      const r = await api.claimSeat(code, seatCode)
+      setSession({ gameId: r.game_id, code, playerId: r.player_id })
+      nav('/game', { replace: true })
+    } catch (e) {
+      sfx.error()
+      toast((e as Error).message, 'hot')
+      setBusy(false)
+    }
+  }
+  const restart = () => {
+    setStep('code')
+    setCode('')
+    checked.current = ''
+  }
+
+  if (step === 'seat')
+    return (
+      <div className="safe-bottom mx-auto flex min-h-dvh max-w-[480px] flex-col px-4">
+        <TopBar title="Use a seat code" onBack={closed ? restart : () => setStep('you')} />
+        <div className="flex flex-1 flex-col gap-5">
+          {closed && <p className="brut-sm bg-sun px-3 py-2.5 font-semibold">🚪 The Banker has closed game {formatCode(code)} to new players.</p>}
+          <p className="font-display text-xl">Moving to a new phone? Ask the Banker for a 6-digit seat code and type it here.</p>
+          <Field
+            label="Seat code"
+            value={seatCode}
+            onChange={(v) => setSeatCode(v.replace(/\D/g, '').slice(0, 6))}
+            placeholder="123 456"
+            inputMode="numeric"
+            maxLength={7}
+            autoFocus
+            onEnter={() => seatCode.length === 6 && claim()}
+          />
+          <p className="text-[13px] opacity-60">Your balance and history move over, and your old phone is signed out of this game.</p>
+        </div>
+        <div className="sticky bottom-0 bg-paper pt-4 pb-2">
+          <Button size="xl" variant="grape" block disabled={seatCode.length !== 6 || busy} onClick={claim}>
+            {busy ? 'Moving your seat…' : 'Take my seat'}
+          </Button>
+        </div>
+      </div>
+    )
+
   if (step === 'you')
     return (
       <div className="safe-bottom mx-auto flex min-h-dvh max-w-[480px] flex-col px-4">
-        <TopBar title={`Join ${formatCode(code)}`} onBack={() => (setStep('code'), setCode(''), (checked.current = ''))} />
+        <TopBar title={`Join ${formatCode(code)}`} onBack={restart} />
         <div className="flex flex-1 flex-col gap-5">
           <div className="flex justify-center py-1">
             <Avatar avatar={avatar} colour={colour} size={96} />
           </div>
           <Field label="Your name" value={name} onChange={setName} placeholder="e.g. Alex" autoFocus={!name} onEnter={() => name.trim() && join()} />
           <PlayerStyle avatar={avatar} colour={colour} onAvatar={setAvatar} onColour={setColour} takenAvatars={taken.avatars} takenColours={taken.colours} />
+          <button type="button" onClick={() => setStep('seat')} className="self-start py-2 font-semibold underline">
+            Already playing on another phone? Use a seat code
+          </button>
+          <p className="text-[13px] opacity-60">The Banker can see your device type, browser and battery level to help run the game.</p>
         </div>
         <div className="sticky bottom-0 bg-paper pt-4 pb-2">
           <Button size="xl" variant="money" block disabled={!name.trim() || busy} onClick={join}>

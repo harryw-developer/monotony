@@ -6,7 +6,7 @@ import { money } from '../lib/format'
 import type { Player } from '../lib/types'
 import { TopBar } from '../screens/common'
 import { useGame } from './GameContext'
-import { BottomNav } from './GameScreen'
+import { Page } from './Frame'
 
 export function ranked(players: Player[]) {
   return [...players].sort((a, b) => Number(a.bankrupt) - Number(b.bankrupt) || (b.balance ?? -Infinity) - (a.balance ?? -Infinity))
@@ -19,10 +19,10 @@ export default function Leaderboard() {
   const nav = useNavigate()
   const visible = state.game.rules.show_balances || state.is_admin
   return (
-    <div className="mx-auto max-w-[480px] px-4 pb-28">
+    <Page>
       <TopBar title="Leaderboard" />
       {!visible && <p className="brut-sm mb-4 bg-sun px-3 py-2.5 font-semibold">🙈 The Banker has hidden everyone’s balances. Only yours is shown.</p>}
-      <ul className="space-y-3">
+      <ul className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
         {(visible ? ranked(players) : players).map((p, i) => (
           <motion.li
             layout
@@ -49,7 +49,7 @@ export default function Leaderboard() {
         ))}
       </ul>
       {!me.is_banker && (
-        <div className="mt-10">
+        <div className="mt-10 lg:max-w-[420px]">
           <HoldButton
             variant="white"
             onConfirm={() => {
@@ -62,7 +62,6 @@ export default function Leaderboard() {
           <p className="mt-2 text-center text-[13px] opacity-60">Your money stays in the game. Rejoin with the same code to get it back.</p>
         </div>
       )}
-      <BottomNav />
-    </div>
+    </Page>
   )
 }

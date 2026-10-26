@@ -2,7 +2,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useEffect, useMemo, useState } from 'react'
 import { hexFor } from '../lib/avatars'
 import { money } from '../lib/format'
-import { Avatar, Button, SystemAvatar } from '../components/ui'
+import { Avatar, Button, Kbd, SystemAvatar } from '../components/ui'
 import { lockedFor, useGame } from './GameContext'
 
 /** A banknote shape, used for confetti and the "sent" fly-away. */
@@ -57,7 +57,17 @@ export function CelebrationOverlay() {
   useEffect(() => {
     if (!celebration) return
     const t = window.setTimeout(clearCelebration, 3200)
-    return () => window.clearTimeout(t)
+    const onKey = (e: KeyboardEvent) => {
+      if (['Enter', 'Escape', ' '].includes(e.key)) {
+        e.preventDefault()
+        clearCelebration()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.clearTimeout(t)
+      window.removeEventListener('keydown', onKey)
+    }
   }, [celebration, clearCelebration])
   const c = celebration
   const colour = !c ? '#00C26E' : c.from === 'bank' ? '#8B5CF6' : c.from === 'parking' ? '#FFD23F' : hexFor(c.from.colour)
@@ -67,6 +77,8 @@ export function CelebrationOverlay() {
         <motion.div
           key={c.id}
           className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-money px-6 text-ink"
+          role="dialog"
+          aria-label="Money received"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -89,7 +101,9 @@ export function CelebrationOverlay() {
             </p>
             <p className="font-display tnum mt-1 text-[64px] leading-none sm:text-[96px]">+{money(c.amount, currency)}</p>
             {c.note && <p className="brut mt-5 bg-white px-4 py-2 text-lg font-semibold">{c.note}</p>}
-            <p className="mt-8 text-sm font-semibold opacity-60">Tap to close</p>
+            <p className="mt-8 text-sm font-semibold opacity-60">
+              Tap to close <Kbd>Enter</Kbd>
+            </p>
           </motion.div>
         </motion.div>
       )}
@@ -162,12 +176,36 @@ export function IncomingRequestOverlay() {
   const req = state.requests.find((r) => r.kind === 'request' && r.to_player === me.id)
   const from = req ? byId.get(req.from_player) : undefined
   const locked = lockedFor(me, serverOffset) !== null
+  const open = !!(req && from && !locked)
+  const answer = async (accept: boolean) => {
+    if (!req || busy) return
+    setBusy(true)
+    await respond(req.id, accept)
+    setBusy(false)
+  }
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase()
+      if (k === 'enter' || k === 'p') {
+        e.preventDefault()
+        void answer(true)
+      } else if (k === 'escape' || k === 'd') {
+        e.preventDefault()
+        void answer(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
   return (
     <AnimatePresence>
       {req && from && !locked && (
         <motion.div
           key={req.id}
           className="fixed inset-0 z-50 flex flex-col bg-sky px-5 text-ink"
+          role="dialog"
+          aria-label="Money request"
           initial={{ y: '100%' }}
           animate={{ y: 0 }}
           exit={{ y: '100%', opacity: 0 }}
@@ -183,29 +221,11 @@ export function IncomingRequestOverlay() {
             <p className="mt-4 font-semibold">You have {money(me.balance, currency)}</p>
           </div>
           <div className="safe-bottom mx-auto grid w-full max-w-[480px] grid-cols-2 gap-3 pb-4">
-            <Button
-              size="xl"
-              variant="white"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true)
-                await respond(req.id, false)
-                setBusy(false)
-              }}
-            >
-              Decline
+            <Button size="xl" variant="white" disabled={busy} onClick={() => answer(false)}>
+              Decline <Kbd>Esc</Kbd>
             </Button>
-            <Button
-              size="xl"
-              variant="money"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true)
-                await respond(req.id, true)
-                setBusy(false)
-              }}
-            >
-              Pay
+            <Button size="xl" variant="money" disabled={busy} onClick={() => answer(true)}>
+              Pay <Kbd>Enter</Kbd>
             </Button>
           </div>
         </motion.div>
@@ -216,11 +236,24 @@ export function IncomingRequestOverlay() {
 
 export function BroadcastOverlay() {
   const { broadcast, clearBroadcast } = useGame()
+  useEffect(() => {
+    if (!broadcast) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === 'Escape') {
+        e.preventDefault()
+        clearBroadcast()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [broadcast, clearBroadcast])
   return (
     <AnimatePresence>
       {broadcast && (
         <motion.div
           className="fixed inset-0 z-[58] flex flex-col items-center justify-center bg-grape px-6 text-center"
+          role="dialog"
+          aria-label="Message from the Banker"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -233,10 +266,10 @@ export function BroadcastOverlay() {
             transition={{ type: 'spring', stiffness: 300, damping: 15 }}
           >
             <div className="text-5xl">📣</div>
-            <p className="mt-2 text-sm font-semibold tracking-wide uppercase opacity-60">From the Banker</p>
+            <p className="mt-2 text-sm font-semibold tracking-wide uppercase opacity-60">{broadcast.payload.private ? 'Just for you, from the Banker' : 'From the Banker'}</p>
             <p className="font-display mt-3 text-[32px] leading-tight break-words">{broadcast.payload.message}</p>
             <Button className="mt-6" size="lg" variant="sun" block onClick={clearBroadcast}>
-              Got it
+              Got it <Kbd>Enter</Kbd>
             </Button>
           </motion.div>
         </motion.div>

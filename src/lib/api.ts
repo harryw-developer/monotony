@@ -2,6 +2,8 @@ import { supabase } from './supabase'
 import { deviceSecret } from './device'
 import type { Account, Settings, State } from './types'
 
+export type AdminResult = { ok: boolean; count: number; code?: string }
+
 function friendly(message: string) {
   if (/failed to fetch|network|load failed/i.test(message)) return 'No connection. Check your internet and try again.'
   return message.replace(/^.*?ERROR:\s*/, '')
@@ -24,7 +26,7 @@ export const api = {
       p_name: name, p_avatar: avatar, p_colour: colour, p_settings: settings,
     }),
   findGame: (code: string) =>
-    call<{ game_id: string; status: string; player_id: string | null; taken_colours: string[]; taken_avatars: string[] }>(
+    call<{ game_id: string; status: string; player_id: string | null; joining_open: boolean; taken_colours: string[]; taken_avatars: string[] }>(
       'find_game', { p_code: code }),
   joinGame: (code: string, name: string, avatar: string, colour: string) =>
     call<{ game_id: string; player_id: string; rejoined: boolean }>('join_game', {
@@ -39,5 +41,7 @@ export const api = {
     call<null>('respond_request', { p_game_id: gameId, p_request_id: requestId, p_accept: accept }),
   claimGo: (gameId: string) => call<{ status: 'paid' | 'pending' }>('claim_go', { p_game_id: gameId }),
   admin: (gameId: string, action: string, payload: Record<string, unknown> = {}) =>
-    call<{ ok: boolean; count: number }>('admin_action', { p_game_id: gameId, p_action: action, p_payload: payload }),
+    call<AdminResult>('admin_action', { p_game_id: gameId, p_action: action, p_payload: payload }),
+  reportDevice: (gameId: string, info: Record<string, unknown>) => call<null>('report_device', { p_game_id: gameId, p_info: info }),
+  claimSeat: (code: string, claim: string) => call<{ game_id: string; player_id: string }>('claim_seat', { p_code: code, p_claim: claim }),
 }

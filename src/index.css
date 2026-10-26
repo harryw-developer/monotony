@@ -66,6 +66,15 @@ input,
 textarea {
   font: inherit;
 }
+
+/* Keyboard users get a clear ring; mouse and touch don't. */
+:focus-visible {
+  outline: 3px solid var(--color-sky);
+  outline-offset: 3px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
 }
 
 @layer components {
@@ -111,6 +120,31 @@ textarea {
 }
 .no-scrollbar {
   scrollbar-width: none;
+}
+
+/* Keyboard hints only show where there is a real keyboard and mouse. */
+.kbd-hint {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .kbd-hint {
+    display: inline-flex;
+  }
+  .press:hover:not(:disabled):not(:active):not([data-pressed="true"]) {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 var(--shade);
+  }
+  .brut-sm.press:hover:not(:disabled):not(:active):not([data-pressed="true"]) {
+    box-shadow: 5px 5px 0 var(--shade);
+  }
+  .scroll-thin::-webkit-scrollbar {
+    width: 10px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background: rgba(127, 127, 127, 0.4);
+    border-radius: 10px;
+  }
 }
 
 .paper-grid {

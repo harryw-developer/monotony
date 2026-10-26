@@ -2,17 +2,18 @@ import { motion } from 'framer-motion'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { PartyAvatar } from '../components/PartyAvatar'
-import { AnimatedMoney, Avatar, Button, Chip } from '../components/ui'
+import { AnimatedMoney, Avatar, Button, Chip, Kbd } from '../components/ui'
 import { api } from '../lib/api'
 import { formatCode, money, timeAgo } from '../lib/format'
 import { buzz, sfx } from '../lib/sound'
 import { describe } from './describe'
+import { MuteButton, Page } from './Frame'
 import { useGame } from './GameContext'
-import { BottomNav, MuteButton } from './GameScreen'
+import { ranked } from './Leaderboard'
 
 export default function Home() {
   const g = useGame()
-  const { state, me, byId, currency } = g
+  const { state, me, byId, currency, players } = g
   const nav = useNavigate()
   const [goBusy, setGoBusy] = useState(false)
   const rules = state.game.rules
@@ -21,6 +22,7 @@ export default function Home() {
   const goPending = state.requests.some((r) => r.kind === 'go' && r.from_player === me.id)
   const paused = state.game.status === 'paused'
   const blocked = paused || me.frozen || me.bankrupt
+  const nowMs = Date.now() + g.serverOffset
 
   const claimGo = async () => {
     setGoBusy(true)
@@ -33,112 +35,144 @@ export default function Home() {
   }
 
   return (
-    <div className="mx-auto max-w-[480px] px-4 pb-28">
-      <header className="safe-top flex items-center gap-3 pb-3">
+    <Page>
+      <header className="safe-top flex items-center gap-3 pb-3 lg:pt-0">
         <Avatar avatar={me.avatar} colour={me.colour} size={56} />
         <div className="min-w-0 flex-1">
-          <p className="font-display truncate text-2xl leading-tight">{me.name}</p>
+          <p className="font-display truncate text-2xl leading-tight lg:text-[32px]">
+            <span className="hidden lg:inline">Hi, </span>
+            {me.name}
+          </p>
           <div className="mt-0.5 flex flex-wrap gap-1">
             {me.is_banker && <Chip tone="grape">Banker</Chip>}
             {state.game.deputy_player === me.id && <Chip tone="grape">Deputy</Chip>}
             <Chip tone="paper">Game {formatCode(state.game.code)}</Chip>
           </div>
         </div>
-        <MuteButton />
+        <div className="lg:hidden">
+          <MuteButton />
+        </div>
       </header>
 
-      {paused && <Banner tone="bg-sun">⏸ The Banker has paused the game</Banner>}
-      {me.frozen && <Banner tone="bg-sky">🧊 Your account is frozen. You can look but not pay.</Banner>}
-      {me.bankrupt && <Banner tone="bg-hot">💀 You’re bankrupt. Thanks for playing!</Banner>}
+      <div className="lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:items-start lg:gap-8">
+        <div>
+          {paused && <Banner tone="bg-sun">⏸ The Banker has paused the game</Banner>}
+          {me.frozen && <Banner tone="bg-sky">🧊 Your account is frozen. You can look but not pay.</Banner>}
+          {me.bankrupt && <Banner tone="bg-hot">💀 You’re bankrupt. Thanks for playing!</Banner>}
 
-      <motion.section
-        layout
-        className="brut relative mt-1 overflow-hidden bg-white px-4 pt-4 pb-5 text-center"
-        style={{ background: me.bankrupt ? '#e5e5e5' : undefined }}
-      >
-        <p className="text-[13px] font-semibold tracking-wide uppercase opacity-60">Your balance</p>
-        <AnimatedMoney value={me.balance} currency={currency} className="font-display block text-[clamp(56px,21vw,96px)] leading-[1.05]" />
-      </motion.section>
+          <motion.section
+            layout
+            className="brut relative mt-1 overflow-hidden bg-white px-4 pt-4 pb-5 text-center lg:py-10"
+            style={{ background: me.bankrupt ? '#e5e5e5' : undefined }}
+          >
+            <p className="text-[13px] font-semibold tracking-wide uppercase opacity-60">Your balance</p>
+            <AnimatedMoney value={me.balance} currency={currency} className="font-display block text-[clamp(56px,21vw,96px)] leading-[1.05] lg:text-[112px]" />
+          </motion.section>
 
-      <div className="mt-4 flex flex-col gap-3">
-        <Button size="xl" variant="money" block disabled={blocked} onClick={() => nav('/game/pay')} className="h-[88px]! text-[32px]!">
-          Pay
-        </Button>
-        <div className="grid grid-cols-2 gap-3">
-          <Button size="xl" variant="sky" disabled={blocked || !rules.allow_requests} onClick={() => nav('/game/request')}>
-            Request
-          </Button>
-          <Button size="xl" variant="sun" disabled={blocked || goBusy || goPending || state.game.go_amount <= 0} onClick={claimGo}>
-            {goPending ? 'GO sent…' : 'Pass GO'}
-          </Button>
+          <div className="mt-4 flex flex-col gap-3">
+            <Button size="xl" variant="money" block disabled={blocked} onClick={() => nav('/game/pay')} className="h-[88px]! text-[32px]! lg:h-[104px]!">
+              Pay <Kbd>P</Kbd>
+            </Button>
+            <div className="grid grid-cols-2 gap-3">
+              <Button size="xl" variant="sky" disabled={blocked || !rules.allow_requests} onClick={() => nav('/game/request')}>
+                Request <Kbd>R</Kbd>
+              </Button>
+              <Button size="xl" variant="sun" disabled={blocked || goBusy || goPending || state.game.go_amount <= 0} onClick={claimGo}>
+                {goPending ? 'GO sent…' : 'Pass GO'} {!goPending && <Kbd>G</Kbd>}
+              </Button>
+            </div>
+          </div>
+
+          {(myRequests.length > 0 || goPending) && (
+            <section className="mt-5 space-y-2">
+              {goPending && (
+                <div className="brut-sm flex items-center gap-3 bg-sun/60 px-3 py-2 font-semibold">
+                  <span className="text-2xl">⏳</span>
+                  <span className="flex-1">Pass GO ({money(state.game.go_amount, currency)}) waiting for the Banker</span>
+                </div>
+              )}
+              {myRequests.map((r) => {
+                const p = byId.get(r.to_player ?? '')
+                return (
+                  <div key={r.id} className="brut-sm flex items-center gap-3 bg-sky/30 px-3 py-2">
+                    {p && <Avatar avatar={p.avatar} colour={p.colour} size={40} />}
+                    <span className="flex-1 font-semibold">
+                      Asked {p?.name} for {money(r.amount, currency)}
+                    </span>
+                    <button
+                      className="brut-sm press h-12 bg-white px-3 text-sm font-semibold"
+                      onClick={async () => {
+                        try {
+                          await api.respond(state.game.id, r.id, false)
+                        } finally {
+                          g.refresh()
+                        }
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )
+              })}
+            </section>
+          )}
+        </div>
+
+        <div className="lg:space-y-6">
+          <section className="mt-6 lg:mt-1">
+            <div className="mb-2 flex items-baseline justify-between">
+              <h2 className="font-display text-xl">Latest</h2>
+              <Link to="/game/history" className="font-semibold text-ink/60 underline">
+                See all
+              </Link>
+            </div>
+            {mine.length === 0 && <p className="opacity-60">No money has moved yet.</p>}
+            <ul className="space-y-2">
+              {mine.slice(0, 8).map((t, i) => {
+                const d = describe(t, byId, me.id)
+                return (
+                  <li key={t.id} className={`brut-sm items-center gap-3 bg-white px-3 py-2 ${i < 3 ? 'flex' : 'hidden lg:flex'}`}>
+                    <PartyAvatar party={d.other} size={40} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold">{d.title}</p>
+                      <p className="truncate text-[13px] opacity-60">
+                        {d.detail} · {timeAgo(t.created_at, nowMs)}
+                      </p>
+                    </div>
+                    <span className={`font-display tnum text-lg ${d.sign > 0 ? 'text-money' : 'text-hot'}`}>
+                      {d.sign > 0 ? '+' : '−'}
+                      {money(t.amount, currency)}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+
+          {/* Laptop only: the table at a glance. */}
+          {(rules.show_balances || state.is_admin) && (
+            <section className="hidden lg:block">
+              <div className="mb-2 flex items-baseline justify-between">
+                <h2 className="font-display text-xl">Standings</h2>
+                <Link to="/game/leaders" className="font-semibold text-ink/60 underline">
+                  Leaderboard
+                </Link>
+              </div>
+              <ul className="brut divide-y-2 divide-ink/10 bg-white">
+                {ranked(players).map((p, i) => (
+                  <li key={p.id} className={`flex items-center gap-3 px-3 py-2 ${p.id === me.id ? 'bg-sun/50' : ''} ${p.bankrupt ? 'opacity-50' : ''}`}>
+                    <span className="font-display w-5 text-center">{i + 1}</span>
+                    <Avatar avatar={p.avatar} colour={p.colour} size={32} dim={p.bankrupt} />
+                    <span className="flex-1 truncate font-semibold">{p.name}</span>
+                    <span className="font-display tnum">{money(p.balance, currency)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </div>
       </div>
-
-      {(myRequests.length > 0 || goPending) && (
-        <section className="mt-5 space-y-2">
-          {goPending && (
-            <div className="brut-sm flex items-center gap-3 bg-sun/60 px-3 py-2 font-semibold">
-              <span className="text-2xl">⏳</span>
-              <span className="flex-1">Pass GO ({money(state.game.go_amount, currency)}) waiting for the Banker</span>
-            </div>
-          )}
-          {myRequests.map((r) => {
-            const p = byId.get(r.to_player ?? '')
-            return (
-              <div key={r.id} className="brut-sm flex items-center gap-3 bg-sky/30 px-3 py-2">
-                {p && <Avatar avatar={p.avatar} colour={p.colour} size={40} />}
-                <span className="flex-1 font-semibold">
-                  Asked {p?.name} for {money(r.amount, currency)}
-                </span>
-                <button
-                  className="brut-sm press h-12 bg-white px-3 text-sm font-semibold"
-                  onClick={async () => {
-                    try {
-                      await api.respond(state.game.id, r.id, false)
-                    } finally {
-                      g.refresh()
-                    }
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            )
-          })}
-        </section>
-      )}
-
-      <section className="mt-6">
-        <div className="mb-2 flex items-baseline justify-between">
-          <h2 className="font-display text-xl">Latest</h2>
-          <Link to="/game/history" className="font-semibold text-ink/60 underline">
-            See all
-          </Link>
-        </div>
-        {mine.length === 0 && <p className="opacity-60">No money has moved yet.</p>}
-        <ul className="space-y-2">
-          {mine.slice(0, 3).map((t) => {
-            const d = describe(t, byId, me.id)
-            return (
-              <li key={t.id} className="brut-sm flex items-center gap-3 bg-white px-3 py-2">
-                <PartyAvatar party={d.other} size={40} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold">{d.title}</p>
-                  <p className="truncate text-[13px] opacity-60">
-                    {d.detail} · {timeAgo(t.created_at, Date.now() + g.serverOffset)}
-                  </p>
-                </div>
-                <span className={`font-display tnum text-lg ${d.sign > 0 ? 'text-money' : 'text-hot'}`}>
-                  {d.sign > 0 ? '+' : '−'}
-                  {money(t.amount, currency)}
-                </span>
-              </li>
-            )
-          })}
-        </ul>
-      </section>
-      <BottomNav />
-    </div>
+    </Page>
   )
 }
 

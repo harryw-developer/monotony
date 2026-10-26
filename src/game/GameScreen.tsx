@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react'
-import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { Button, Spinner } from '../components/ui'
 import { clearSession, getSession } from '../lib/device'
-import { isMuted, onMuted, setMuted } from '../lib/sound'
 import Bank from './Bank'
+import { CommandsProvider } from './Commands'
 import { GameProvider, useGame } from './GameContext'
 import GameOver from './GameOver'
 import History from './History'
@@ -21,7 +20,12 @@ export default function GameRoute() {
     <GameProvider
       key={session.gameId}
       session={session}
-      onFatal={(msg) => nav('/', { replace: true, state: { notice: msg } })}
+      onFatal={(msg) =>
+        nav('/', {
+          replace: true,
+          state: { notice: /not in this game/i.test(msg) ? 'This phone isn’t in that game any more. The Banker may have moved your seat to another phone.' : msg },
+        })
+      }
       fallback={(error) => (
         <div className="mx-auto flex min-h-dvh max-w-[480px] flex-col justify-center px-4">
           <Spinner label={error ? 'Reconnecting…' : 'Opening your wallet…'} />
@@ -61,7 +65,7 @@ function Shell() {
     )
   if (status === 'ended') return <GameOver />
   return (
-    <>
+    <CommandsProvider>
       <Routes>
         <Route index element={<Home />} />
         <Route path="pay" element={<PayFlow mode="pay" />} />
@@ -75,67 +79,6 @@ function Shell() {
       <IncomingRequestOverlay />
       <BroadcastOverlay />
       <LockOverlay />
-    </>
-  )
-}
-
-export function BottomNav() {
-  const { state } = useGame()
-  const loc = useLocation()
-  const vault = loc.pathname.endsWith('/bank')
-  const pendingGo = state.is_admin ? state.requests.filter((r) => r.kind === 'go').length : 0
-  const tabs = [
-    { to: '/game', label: 'Home', icon: '🏠', end: true },
-    { to: '/game/history', label: 'History', icon: '🧾' },
-    { to: '/game/leaders', label: 'Leaders', icon: '🏆' },
-    ...(state.is_admin ? [{ to: '/game/bank', label: 'Bank', icon: '🏦', badge: pendingGo }] : []),
-  ]
-  return (
-    <nav
-      className={`safe-bottom fixed inset-x-0 bottom-0 z-30 border-t-[3px] px-2 pt-2 ${vault ? 'border-grape bg-vault' : 'border-ink bg-paper'}`}
-    >
-      <div className="mx-auto flex max-w-[520px] gap-2">
-        {tabs.map((t) => (
-          <NavLink
-            key={t.to}
-            to={t.to}
-            end={t.end}
-            className={({ isActive }) =>
-              `brut-sm press relative flex h-14 flex-1 flex-col items-center justify-center text-[13px] font-semibold ${
-                isActive ? (t.label === 'Bank' ? 'bg-grape text-white' : 'bg-sun text-ink') : vault ? 'bg-vault-card text-paper' : 'bg-white text-ink'
-              }`
-            }
-          >
-            <span className="text-xl leading-none">{t.icon}</span>
-            {t.label}
-            {'badge' in t && !!t.badge && (
-              <span className="font-display absolute -top-2 -right-1 flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-ink bg-hot px-1 text-[13px] text-ink">
-                {t.badge}
-              </span>
-            )}
-          </NavLink>
-        ))}
-      </div>
-    </nav>
-  )
-}
-
-export function MuteButton({ dark }: { dark?: boolean }) {
-  const [muted, set] = useState(isMuted())
-  useEffect(() => {
-    const off = onMuted(set)
-    return () => {
-      off()
-    }
-  }, [])
-  return (
-    <button
-      type="button"
-      aria-label={muted ? 'Turn sound on' : 'Mute sound'}
-      onClick={() => setMuted(!muted)}
-      className={`brut-sm press flex h-14 w-14 shrink-0 items-center justify-center text-2xl ${dark ? 'bg-vault-card' : 'bg-white'}`}
-    >
-      {muted ? '🔇' : '🔊'}
-    </button>
+    </CommandsProvider>
   )
 }

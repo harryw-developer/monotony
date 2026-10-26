@@ -4,7 +4,7 @@ import type { Player, Tx } from '../lib/types'
 import { TopBar } from '../screens/common'
 import { describe, groupByTime } from './describe'
 import { useGame } from './GameContext'
-import { BottomNav } from './GameScreen'
+import { Page } from './Frame'
 
 export function TxRow({
   tx, byId, meId, currency, nowMs, dark, action, as: Tag = 'li',
@@ -46,30 +46,37 @@ export default function History() {
   const totalIn = mine.filter((t) => t.to_player === me.id).reduce((s, t) => s + t.amount, 0)
   const totalOut = mine.filter((t) => t.from_player === me.id).reduce((s, t) => s + t.amount, 0)
   return (
-    <div className="mx-auto max-w-[480px] px-4 pb-28">
+    <Page>
       <TopBar title="History" />
-      <div className="mb-5 grid grid-cols-2 gap-3">
-        <div className="brut bg-money px-3 py-2">
-          <p className="text-[13px] font-semibold uppercase opacity-70">Money in</p>
-          <p className="font-display tnum text-2xl">{money(totalIn, currency)}</p>
+      <div className="lg:grid lg:grid-cols-[300px_minmax(0,1fr)] lg:items-start lg:gap-8">
+        <div className="mb-5 grid grid-cols-2 gap-3 lg:sticky lg:top-6 lg:grid-cols-1">
+          <div className="brut bg-money px-3 py-2 lg:py-4">
+            <p className="text-[13px] font-semibold uppercase opacity-70">Money in</p>
+            <p className="font-display tnum text-2xl lg:text-[32px]">{money(totalIn, currency)}</p>
+          </div>
+          <div className="brut bg-hot px-3 py-2 lg:py-4">
+            <p className="text-[13px] font-semibold uppercase opacity-70">Money out</p>
+            <p className="font-display tnum text-2xl lg:text-[32px]">{money(totalOut, currency)}</p>
+          </div>
+          <div className="brut hidden bg-white px-3 py-4 lg:block">
+            <p className="text-[13px] font-semibold uppercase opacity-70">Payments</p>
+            <p className="font-display tnum text-[32px]">{mine.length}</p>
+          </div>
         </div>
-        <div className="brut bg-hot px-3 py-2">
-          <p className="text-[13px] font-semibold uppercase opacity-70">Money out</p>
-          <p className="font-display tnum text-2xl">{money(totalOut, currency)}</p>
+        <div>
+          {mine.length === 0 && <p className="opacity-60">Nothing yet. Payments you send and receive show up here.</p>}
+          {groupByTime(mine, nowMs).map((g) => (
+            <section key={g.label} className="mb-5">
+              <h2 className="font-display mb-2 text-xl">{g.label}</h2>
+              <ul className="space-y-2">
+                {g.items.map((t) => (
+                  <TxRow key={t.id} tx={t} byId={byId} meId={me.id} currency={currency} nowMs={nowMs} />
+                ))}
+              </ul>
+            </section>
+          ))}
         </div>
       </div>
-      {mine.length === 0 && <p className="opacity-60">Nothing yet. Payments you send and receive show up here.</p>}
-      {groupByTime(mine, nowMs).map((g) => (
-        <section key={g.label} className="mb-5">
-          <h2 className="font-display mb-2 text-xl">{g.label}</h2>
-          <ul className="space-y-2">
-            {g.items.map((t) => (
-              <TxRow key={t.id} tx={t} byId={byId} meId={me.id} currency={currency} nowMs={nowMs} />
-            ))}
-          </ul>
-        </section>
-      ))}
-      <BottomNav />
-    </div>
+    </Page>
   )
 }

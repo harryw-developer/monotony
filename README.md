@@ -11,6 +11,24 @@ Monopoly money on everyone’s phone. One installable web app with a **Player** 
 
 On a phone, use **Share → Add to Home Screen** to install it full-screen.
 
+### Banker extras
+
+- **Player panel** (tap a player in the Bank): Controls, **Details** (device, OS, browser, battery, network, screen, whether the app is installed or on screen, app version, game stats) and **Activity** (their money and every Banker action on them).
+- Private full-screen messages, remote app reload, fines into Free Parking, set the pot, freeze everyone, cancel any request, let removed players back in, restart the round, a new game code, and closing the game to new players.
+- **Move to a new phone**: a one-time 6-digit seat code moves a player's seat to another device with their balance intact.
+- **Banker log**: every admin action, with who did it and when.
+
+### On a laptop
+
+From 1024px wide the app switches to a sidebar layout with a live activity feed in the Bank, and it supports keyboard and mouse fully:
+
+- `⌘K` / `Ctrl K` or `/` opens a command palette for every action, including per-player ones.
+- `H` `Y` `L` `B` switch tabs, `P` pays, `R` requests, `G` passes GO, `M` mutes, `?` lists every shortcut.
+- When paying, `1–9` picks a recipient, digits type the amount, and pressing `Enter` twice sends.
+- In the Bank, `1–9` opens a player's panel. Right-click a player for a quick menu. Panels close with `Esc` and open from the right.
+
+Phones keep the original touch layout; key hints only appear on devices with a mouse.
+
 ## How it works
 
 - `src/`: Vite + React + TypeScript, Tailwind CSS v4, Framer Motion, HashRouter, PWA through `vite-plugin-pwa`.
